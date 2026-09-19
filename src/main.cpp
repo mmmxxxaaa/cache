@@ -2,16 +2,23 @@
 #include <list>
 #include <unordered_map>
 
+// до внедрения шаблонов число-значение совпадало с числом-ключом, после внедрения нужно уже разделять и хранить их парой
+template <typename T, typename KeyT = int>
 struct SimpleLRU {
     size_t capacity;
-    std::list<int> cache_list;
+    std::list<std::pair<T, KeyT>> cache_list;
 
-    std::unordered_map<int, std::list<int>::iterator> hash_map;
+    using ListIterator = typename std::list<std::pair<T, KeyT>>::iterator;
+    // std::unordered_map<T, std::list<int>::iterator> hash_map;
+    std::unordered_map<KeyT, ListIterator> hash_map;
 
     SimpleLRU(size_t sz) : capacity(sz) {} // конструктор
 
-    bool lookup_update(int key) 
+    template <typename F>
+    bool lookup_update(KeyT key, F slow_get_page) 
     {
+        if (capacity == 0) return false;
+
         auto hit = hash_map.find(key); // в hit - "указатель" на конкретный узел двусвязного списка
         
         if (hit != hash_map.end())
@@ -20,27 +27,37 @@ struct SimpleLRU {
             cache_list.splice(cache_list.begin(), cache_list, ptr);
             
             return true;
-        }     
-        
+        }
+
+        T page = slow_get_page(key);
+
         if (cache_list.size() == capacity)
         {
-            int oldest_key = cache_list.back();
-            hash_map.erase(oldest_key);
+            // KeyT oldest_key = cache_list.back(); ключ теперь лежит во втором поле пары
+            hash_map.erase(cache_list.back().second);
             cache_list.pop_back();
         }
 
-        cache_list.push_front(key);
+        // cache_list.push_front(key); push_front требует передать ему уже готовую структуру данных
+        cache_list.emplace_front(page, key); // принимает "сырые" аргументы и конструирует из них финальный объект 
         hash_map.emplace(key, cache_list.begin());
         return false;
     }   
 };
+
+int imitator_of_slow_get_page(int key) 
+{
+    // В реальной жизни здесь был бы поход на жесткий диск
+    return key; 
+}
+
 
 int main() {
     size_t cache_capacity = 0, n_of_requests = 0;
 
     std::cin >> cache_capacity >> n_of_requests;
 
-    SimpleLRU cache(cache_capacity);
+    SimpleLRU<int, int> cache(cache_capacity);
     int hits = 0;
 
     for (int i = 0; i < n_of_requests; i++)
@@ -48,7 +65,7 @@ int main() {
         int page_id = 0;
         std::cin >> page_id;
 
-        if (cache.lookup_update(page_id))
+        if (cache.lookup_update(page_id, imitator_of_slow_get_page))
         {
             hits++;
         }
